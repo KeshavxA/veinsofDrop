@@ -1,0 +1,44 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+@keyframes pulse-gradient {
+  0%, 100% { transform: scale(0.95) translate3d(0, 0, 0); }
+  50% { transform: scale(1.05) translate3d(2%, -3%, 0); }
+}
+
+@keyframes drop {
+  0% { transform: translateY(-5%) scale(1); opacity: 0.8; }
+  50% { transform: translateY(5%) scale(1.04); opacity: 1; }
+  100% { transform: translateY(-5%) scale(1); opacity: 0.85; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+
+.plasma-gradient-bg-1 {
+  animation: pulse-gradient 12s ease-in-out infinite;
+}
+
+.plasma-gradient-bg-2 {
+  animation: pulse-gradient 12s ease-in-out infinite;
+  animation-delay: -6s;
+}
+
+.float-animation {
+  animation: float 6s ease-in-out infinite;
+}
+
+.float-animation-delayed {
+  animation: float 6s ease-in-out infinite;
+  animation-delay: 2.4s;
+}
+
+body {
+  margin: 0;
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
