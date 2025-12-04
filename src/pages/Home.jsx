@@ -1,69 +1,18 @@
-import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-const staticDonorData = [
-  {
-    name: "Aarav Sharma",
-    email: "aarav.sharma@example.com",
-    phone: "+91-9876543210",
-    bloodGroup: "O+",
-    location: "Mumbai, Maharashtra",
-    availablequantity: "450 ml",
-    id: 1,
-  },
-  {
-    name: "Priya Patel",
-    email: "priya.p@example.com",
-    phone: "+91-8765432109",
-    bloodGroup: "A-",
-    location: "Ahmedabad, Gujarat",
-    availablequantity: "350 ml",
-    id: 2,
-  },
-  {
-    name: "John Doe",
-    email: "johndoe88@testmail.com",
-    phone: "+1-555-0123",
-    bloodGroup: "B+",
-    location: "New York, USA",
-    availablequantity: "1 Unit",
-    id: 3,
-  },
-  {
-    name: "Sneha Gupta",
-    email: "sneha.gupta@example.in",
-    phone: "+91-7654321098",
-    bloodGroup: "AB+",
-    location: "Delhi, India",
-    availablequantity: "450 ml",
-    id: 4,
-  },
-  {
-    name: "David Smith",
-    email: "dsmith.donates@email.com",
-    phone: "+44-7700-900077",
-    bloodGroup: "O-",
-    location: "London, UK",
-    availablequantity: "500 ml",
-    id: 5,
-  },
-  {
-    name: "Fatima Khan",
-    email: "fatima.k@example.com",
-    phone: "+91-9988776655",
-    bloodGroup: "B-",
-    location: "Bangalore, Karnataka",
-    availablequantity: "350 ml",
-    id: 6,
-  }
-];
+
+import { db } from '../firebase' 
+import { collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore'
 
 function Home() {
   const { currentUser, signOut, isAuthenticated } = useAuth()
-  const navigate = useNavigate()
+  const navigate = useNavigate() 
+  const location = useLocation() 
   
-  const [donors, setDonors] = useState(staticDonorData); 
+  const [donors, setDonors] = useState([]); 
+  const [loading, setLoading] = useState(true); 
   const [showDonorPopup, setShowDonorPopup] = useState(false)
   const [showRequestPopup, setShowRequestPopup] = useState(false)
 
@@ -81,7 +30,38 @@ function Home() {
   const [unitsRequired, setUnitsRequired] = useState("")
   const [emergencyLevel, setEmergencyLevel] = useState("normal")
   const [hospitalLocation, setHospitalLocation] = useState("")
-  
+
+
+  const fetchDonors = async () => {
+    setLoading(true);
+    try {
+      
+      const donorsRef = collection(db, "donors");
+      const querySnapshot = await getDocs(donorsRef);
+      const donorsList = querySnapshot.docs.map(doc => ({
+        id: doc.id, 
+        ...doc.data() 
+      }));
+
+      setDonors(donorsList);
+    } catch (error) {
+      console.error("Error fetching donors:", error);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchDonors();
+      
+      if(currentUser?.email) {
+        setDonorEmail(currentUser.email);
+        setRequestEmail(currentUser.email);
+      }
+    }
+    console.log("Current path:", location.pathname);
+
+  }, [isAuthenticated, currentUser, location]);
 
   const handleLogout = async () => {
     const result = await signOut()
@@ -90,55 +70,72 @@ function Home() {
     }
   }
 
-  const handleDonorSubmit = (e) => {
+  const handleDonorSubmit = async (e) => {
     e.preventDefault()
 
-    const donorData = {
-      name: donorName,
-      email: donorEmail,
-      phone: donorPhone,
-      bloodGroup: donorBloodGroup,
-      location: donorLocation,
-      availablequantity: donorAvailableQuantity, 
-      id: Date.now(),
-    };
+    try {
+      
+      await addDoc(collection(db, "donors"), {
+        name: donorName,
+        email: donorEmail,
+        phone: donorPhone,
+        bloodGroup: donorBloodGroup,
+        location: donorLocation,
+        availablequantity: donorAvailableQuantity, 
+        userId: currentUser?.uid || "anonymous", 
+        createdAt: new Date() 
+      });
 
-    setDonors(prevDonors => [donorData, ...prevDonors]); 
-    console.log('Donor form submitted. Data:', donorData);
-    
-    setShowDonorPopup(false)
-    setDonorName(""); setDonorPhone(""); setDonorBloodGroup(""); setDonorLocation(""); setAvailableQuantity(0);
+      alert("Thank you! You are now registered as a donor.");
+      fetchDonors();
+      
+      setShowDonorPopup(false)
+      setDonorName(""); setDonorPhone(""); setDonorBloodGroup(""); setDonorLocation(""); setAvailableQuantity(0);
+
+    } catch (error) {
+      console.error("Error adding donor: ", error);
+      alert("Failed to submit. See console for details.");
+    }
   }
 
-  const handleRequestSubmit = (e) => {
+  const handleRequestSubmit = async (e) => {
     e.preventDefault()
 
-    const requestData = {
-      patientName,
-      bloodGroup,
-      requestEmail,
-      requestPhone,
-      unitsRequired,
-      emergencyLevel,
-      hospitalLocation,
-    };
+    try {
+      await addDoc(collection(db, "requests"), {
+        patientName,
+        bloodGroup,
+        requestEmail,
+        requestPhone,
+        unitsRequired,
+        emergencyLevel,
+        hospitalLocation,
+        userId: currentUser?.uid || "anonymous",
+        status: "pending",
+        createdAt: new Date()
+      });
 
-    console.log('Request form submitted. Data:', requestData)
+      console.log('Request submitted to database');
+      alert("Blood request submitted successfully!");
 
-    setShowRequestPopup(false)
-   
-    setPatientName(""); setBloodGroup(""); setRequestPhone(""); setUnitsRequired(""); setHospitalLocation("");
+      setShowRequestPopup(false)
+      setPatientName(""); setBloodGroup(""); setRequestPhone(""); setUnitsRequired(""); setHospitalLocation("");
+
+    } catch (error) {
+      console.error("Error submitting request: ", error);
+      alert("Failed to submit request.");
+    }
   }
 
   return (
     <div className="m-0 p-0 font-sans bg-[#e6fffb] text-[#9ab3b3] leading-relaxed min-h-screen">
       <aside className="fixed top-1/2 left-4 -translate-y-1/2 flex flex-col gap-3 z-50">
-       
+       {/* Sidebar content if any */}
       </aside>
+      
       <header className="bg-gradient-to-r from-[rgb(191,203,203)] to-[rgb(219,43,43)] text-white">
         <div className="max-w-[1400px] mx-auto px-4 flex flex-col sm:flex-row items-center justify-between py-3 gap-2 sm:gap-0 relative">
           <div className="flex items-center gap-3">
-     
             <img src="/assets/logo.png" alt="veinsofDrop logo" className="h-11 w-auto block rounded-md" />
             <h1 className="m-0 text-xl font-bold"></h1> 
           </div>
@@ -159,10 +156,33 @@ function Home() {
               Request
             </button>
           </div>
+          
           <nav aria-label="Main navigation" className="absolute left-1/2 transform -translate-x-1/2 hidden md:block">
             <ul className="flex gap-4">
-              <li><Link to="/" className="text-white hover:text-red-700 font-semibold">Home</Link></li>
-              <li><Link to="/profile" className="text-white hover:text-red-700 font-semibold">Profile</Link></li>
+              <li>
+                <Link 
+                  to="/" 
+                  className={`font-semibold transition-colors ${
+                    location.pathname === '/' 
+                      ? 'text-white font-bold' // Removed border-b-2 to fix underline issue
+                      : 'text-gray-100 hover:text-red-700'   
+                  }`}
+                >
+                  Home
+                </Link>
+              </li>
+              <li>
+                <Link 
+                  to="/profile" 
+                  className={`font-semibold transition-colors ${
+                    location.pathname === '/profile' 
+                      ? 'text-white font-bold' 
+                      : 'text-gray-100 hover:text-red-700'
+                  }`}
+                >
+                  Profile
+                </Link>
+              </li>
               <li>
                 <button 
                   onClick={() => setShowDonorPopup(true)}
@@ -183,6 +203,7 @@ function Home() {
               </li>
             </ul>
           </nav>
+
           <div className="flex items-center gap-3 mt-2 sm:mt-0">
             {isAuthenticated ? (
               <>
@@ -210,84 +231,183 @@ function Home() {
 
       <main className="max-w-[1400px] mx-auto px-4 py-10">
        
-        {isAuthenticated && (
+        {isAuthenticated ? (
+            // ========================================================
+            //  LOGGED IN USER: DASHBOARD
+            // ========================================================
             <section className="bg-white p-7 rounded-lg shadow-lg">
                 <div className="flex justify-between items-center mb-6 border-b pb-2">
                     <h3 className="text-2xl font-bold text-gray-800">Available Donors</h3>
                     <button 
+                        onClick={fetchDonors}
                         className="bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-lg hover:bg-gray-300 transition"
-                    >
+                    > 
+                      Refresh List
                     </button>
                 </div>
                 <p className="text-gray-500 mb-4 text-sm">Availability of donors nearby</p>
 
-                <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                            <tr>
-                              <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">DONOR NAME</td>
-                              <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">EMAIL</td>
-                              <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">CONTACT</td>
-                              <td className="px-6 py-3 text-left text-xs font-medium text-gray-600  uppercase tracking-wider">BLOOD TYPE</td>
-                              <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">LOCATION</td>
-                              <td className="px-6 py-3 text-left text-xs font-medium  text-gray-600 uppercase tracking-wider">AVAILABLE QUANTITY</td>
-                              <td className="px-6 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">REQUEST</td>
-                            </tr>
-        
-                          {donors.map((donor, index) => (
-                          <tr key={donor.id || index}>
-                                    
-                          <td className="px-6 py-4 whitespace-nowrap">
-                               <div className="flex items-center">
-                              <div className="ml-4">
-                                   <div className="text-sm font-medium text-gray-900">{donor.name}</div>                                        
-                                   {donor.email.includes('example') && (
-                                  <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5">
-                                         
-                                  </span>
-                                  )}
-                              </div>
-                              </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-900">{donor.email}</div>
-                                       
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="text-sm text-gray-900">{donor.phone}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
-                                            donor.bloodGroup.includes('+') ? 'bg-red-100 text-red-700':'bg-red-100 text-red-700'
-                                        }`}>
-                                            {donor.bloodGroup}
-                                        </span>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        {donor.location}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                        {donor.availablequantity}
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <button
-                                            onClick={() => console.log(`Request to ${donor.name}`)}
-                                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#db2b2b] hover:bg-[#c02525] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#db2b2b]"
-                                        >
-                                            Request
-                                        </button>
+                {loading ? (
+                  <div className="text-center py-10">
+                    <p className="text-gray-500 text-lg">Loading donor data...</p>
+                  </div>
+                ) : donors.length === 0 ? (
+                  <div className="text-center py-10">
+                    <p className="text-gray-500">No donors available yet. Be the first to donate!</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead>
+                              <tr>
+                                <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">DONOR NAME</td>
+                                <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">EMAIL</td>
+                                <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">CONTACT</td>
+                                <td className="px-6 py-3 text-left text-xs font-medium text-gray-600  uppercase tracking-wider">BLOOD TYPE</td>
+                                <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">LOCATION</td>
+                                <td className="px-6 py-3 text-left text-xs font-medium  text-gray-600 uppercase tracking-wider">AVAILABLE QUANTITY</td>
+                                <td className="px-6 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">REQUEST</td>
+                              </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                            {donors.map((donor, index) => (
+                            <tr key={donor.id || index}>
+                                      
+                            <td className="px-6 py-4 whitespace-nowrap">
+                                <div className="flex items-center">
+                                <div className="ml-4">
+                                    <div className="text-sm font-medium text-gray-900">{donor.name}</div>                                        
+                                    {donor.email && donor.email.includes('example') && (
+                                    <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5">
+                                            Verified
+                                    </span>
+                                    )}
+                                </div>
+                                </div>
                                       </td>
-                                    </tr>
-                                ))}
-                           
-                        </table>
-                     </div>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                          <div className="text-sm text-gray-900">{donor.email}</div>
+                                        
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                      <div className="text-sm text-gray-900">{donor.phone}</div>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap">
+                                          <span className={`px-3 py-1 text-sm font-semibold rounded-full ${
+                                              donor.bloodGroup && donor.bloodGroup.includes('+') ? 'bg-red-100 text-red-700':'bg-red-100 text-red-700'
+                                          }`}>
+                                              {donor.bloodGroup}
+                                          </span>
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                          {donor.location}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                                          {donor.availablequantity}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                          <button
+                                              onClick={() => console.log(`Request to ${donor.name}`)}
+                                              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#db2b2b] hover:bg-[#c02525] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#db2b2b]"
+                                          >
+                                              Request
+                                          </button>
+                                        </td>
+                                      </tr>
+                                  ))}
+                            </tbody>
+                          </table>
+                      </div>
+                  )}
                   </section>
-             )}
+             ) : (
+              // ========================================================
+              //  PUBLIC VISITOR: LANDING PAGE
+              // ========================================================
+              <div className="space-y-16">
+                
+                {/* 1. HERO SECTION */}
+                <section className="flex flex-col-reverse md:flex-row items-center justify-between gap-10 py-10">
+                  <div className="flex-1 space-y-6">
+                    <h1 className="text-4xl md:text-6xl font-bold text-[#053c3c] leading-tight">
+                      Donate Blood, <br/>
+                      <span className="text-[#db2b2b]">Save a Life.</span>
+                    </h1>
+                    <p className="text-lg text-gray-600 max-w-lg">
+                      Every drop counts. Join our community of heroes. Connect directly with those in need and make a difference in minutes.
+                    </p>
+                    <div className="flex gap-4 pt-4">
+                      <button 
+                        onClick={() => setShowDonorPopup(true)}
+                        className="px-8 py-3 bg-[#db2b2b] text-white rounded-full font-bold shadow-lg hover:bg-[#c02525] transition transform hover:-translate-y-1"
+                      >
+                        Donate Now
+                      </button>
+                      <button 
+                        onClick={() => setShowRequestPopup(true)}
+                        className="px-8 py-3 bg-white text-[#db2b2b] border-2 border-[#db2b2b] rounded-full font-bold hover:bg-red-50 transition"
+                      >
+                        Find Blood
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex-1 flex justify-center">
+                    <img 
+                      src="https://img.freepik.com/free-vector/blood-donation-concept-illustration_114360-1044.jpg" 
+                      alt="Blood Donation Illustration" 
+                      className="w-full max-w-md rounded-xl shadow-2xl"
+                    />
+                  </div>
+                </section>
+  
+                {/* 2. STATS SECTION */}
+                <section className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                  <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-[#db2b2b]">
+                    <h3 className="text-4xl font-bold text-[#db2b2b] mb-2">1,200+</h3>
+                    <p className="text-gray-600 font-medium">Donors Registered</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-[#053c3c]">
+                    <h3 className="text-4xl font-bold text-[#053c3c] mb-2">850+</h3>
+                    <p className="text-gray-600 font-medium">Lives Saved</p>
+                  </div>
+                  <div className="bg-white p-6 rounded-xl shadow-md border-b-4 border-[#db2b2b]">
+                    <h3 className="text-4xl font-bold text-[#db2b2b] mb-2">24/7</h3>
+                    <p className="text-gray-600 font-medium">Emergency Support</p>
+                  </div>
+                </section>
+  
+                {/* 3. HOW IT WORKS */}
+                <section className="py-10">
+                  <h2 className="text-3xl font-bold text-center text-[#053c3c] mb-12">How veinsofDrop Works</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    {/* Step 1 */}
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-16 h-16 bg-red-100 text-[#db2b2b] rounded-full flex items-center justify-center text-2xl font-bold mb-4">1</div>
+                      <h4 className="text-xl font-bold mb-2">Register</h4>
+                      <p className="text-gray-600 px-4">Sign up as a donor or a requester in less than 2 minutes.</p>
+                    </div>
+                    {/* Step 2 */}
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-16 h-16 bg-red-100 text-[#db2b2b] rounded-full flex items-center justify-center text-2xl font-bold mb-4">2</div>
+                      <h4 className="text-xl font-bold mb-2">Connect</h4>
+                      <p className="text-gray-600 px-4">Find compatible donors nearby or respond to emergency requests.</p>
+                    </div>
+                    {/* Step 3 */}
+                    <div className="flex flex-col items-center text-center">
+                      <div className="w-16 h-16 bg-red-100 text-[#db2b2b] rounded-full flex items-center justify-center text-2xl font-bold mb-4">3</div>
+                      <h4 className="text-xl font-bold mb-2">Save a Life</h4>
+                      <p className="text-gray-600 px-4">Coordinate securely and help someone in their time of need.</p>
+                    </div>
+                  </div>
+                </section>
+  
+              </div>
+           )}
       </main>
 
       <footer className="bg-[#f1f7f7] py-4 mt-8 border-t border-black/5">
         <div className="max-w-[1400px] mx-auto px-4 text-[#053c3c] text-center">
-          <p>&copy; <span>{new Date().getFullYear()}</span> Footer</p>
+          <p>&copy; <span>{new Date().getFullYear()}</span> veinsofDrop. All rights reserved.</p>
         </div>
       </footer>
 
