@@ -148,7 +148,6 @@ function Register() {
         aria-hidden="true"
       />
 
-     
       <header className="relative z-10">
         <nav className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 text-[#142323] font-semibold tracking-wide hover:opacity-80 transition-opacity">
@@ -167,7 +166,6 @@ function Register() {
         </nav>
       </header>
 
-      
       <main className="relative z-10 max-w-6xl mx-auto px-6 pb-16">
         <section className="grid gap-12 lg:grid-cols-[1.05fr_1fr] items-center min-h-[calc(100vh-200px)]">
           
@@ -183,7 +181,6 @@ function Register() {
               Register now to connect with hospitals and families in need. Your blood donation can make the difference between life and death. Join thousands of heroes making an impact every day.
             </p>
 
-           
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="bg-white/70 border border-white/60 rounded-3xl p-6 shadow-[0_30px_60px_-35px_rgba(20,35,35,0.6)] float-animation backdrop-blur-sm">
                 <div className="flex items-center gap-3 mb-4">
@@ -324,7 +321,6 @@ function Register() {
         </section>
       </main>
 
-      
       <footer className="relative z-10 px-6 pb-10">
         <div className="max-w-6xl mx-auto text-sm text-[#142323]/60 flex flex-wrap items-center justify-between gap-4">
           <p>&copy; {new Date().getFullYear()} veinsofDrop. Empowering every heartbeat.</p>

@@ -18,13 +18,12 @@ function Login() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    // Handle login logic here
     console.log('Login attempt:', formData)
   }
 
   return (
     <div className="min-h-screen relative bg-[#f8fafa] text-[#244141]">
-      {/* Animated Background Gradient */}
+    
       <div className="fixed inset-0 overflow-hidden z-0" aria-hidden="true">
         <div 
           className="absolute w-[60vmax] h-[60vmax] rounded-full blur-[80px] opacity-60 plasma-gradient-bg-2"
@@ -44,7 +43,6 @@ function Login() {
         />
       </div>
 
-      {/* Grid Overlay */}
       <div 
         className="fixed inset-0 opacity-70 pointer-events-none z-0"
         style={{
@@ -58,7 +56,6 @@ function Login() {
         aria-hidden="true"
       />
 
-      {/* Header */}
       <header className="relative z-10">
         <nav className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 text-[#142323] font-semibold tracking-wide hover:opacity-80 transition-opacity">
@@ -76,11 +73,9 @@ function Login() {
           </Link>
         </nav>
       </header>
-
-      {/* Main Content */}
       <main className="relative z-10 max-w-6xl mx-auto px-6 pb-16">
         <section className="grid gap-12 lg:grid-cols-[1.05fr_1fr] items-center min-h-[calc(100vh-200px)]">
-          {/* Left Side - Welcome Content */}
+        
           <div className="space-y-8">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/80 text-[#db2b2b] text-sm font-medium shadow shadow-[#db2b2b]/10">
               <span className="w-2 h-2 rounded-full bg-[#db2b2b] animate-ping"></span>
@@ -93,7 +88,6 @@ function Login() {
               Your dashboard connects you to nearby hospitals, requests from families in need, and your personal impact timeline. Stay ready to respond when every second matters.
             </p>
 
-            {/* Testimonial Cards */}
             <div className="grid gap-5 sm:grid-cols-2">
               <div className="bg-white/70 border border-white/60 rounded-3xl p-6 shadow-[0_30px_60px_-35px_rgba(20,35,35,0.6)] float-animation backdrop-blur-sm">
                 <div className="flex items-center gap-3 mb-4">
@@ -117,8 +111,6 @@ function Login() {
               </div>
             </div>
           </div>
-
-          {/* Right Side - Login Form */}
           <form 
             onSubmit={handleSubmit}
             className="relative bg-white/80 border border-white/70 rounded-3xl shadow-[0_38px_80px_-35px_rgba(219,43,43,0.55)] p-8 space-y-6 backdrop-blur-sm"
@@ -221,7 +213,6 @@ function Login() {
         </section>
       </main>
 
-      {/* Footer */}
       <footer className="relative z-10 px-6 pb-10">
         <div className="max-w-6xl mx-auto text-sm text-[#142323]/60 flex flex-wrap items-center justify-between gap-4">
           <p>&copy; {new Date().getFullYear()} veinsofDrop. Empowering every heartbeat.</p>
