@@ -21,7 +21,6 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    // Set up auth state listener
     const unsubscribe = onAuthStateChanged(
       auth,
       (user) => {
