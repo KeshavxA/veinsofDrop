@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { createUserWithEmailAndPassword } from 'firebase/auth'
-import { auth } from '../firebase'
+import { auth, db } from '../../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import FirebaseConfigHelper from '../components/FirebaseConfigHelper'
+import { doc, setDoc } from 'firebase/firestore'
 
 function Register() {
   const navigate = useNavigate()
@@ -54,6 +56,16 @@ function Register() {
 
     setLoading(true)
 
+    if (!auth) {
+      setError(
+        'Firebase is not configured. Please update firebase.js with your Firebase credentials. ' +
+        'Go to Firebase Console → Project Settings → Your apps → Copy the config values. ' +
+        'See FIREBASE_SETUP.md for detailed instructions.'
+      )
+      setLoading(false)
+      return
+    }
+
     try {
       const userCredential = await createUserWithEmailAndPassword(
         auth,
@@ -61,11 +73,43 @@ function Register() {
         formData.password
       )
       
-     
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        email: userCredential.user.email,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      })
+      
       console.log('User registered successfully:', userCredential.user.email)
       
       navigate('/')
     } catch (error) {
+      console.error('Registration error:', error)
+      
+   
+      if (error.message && (
+        error.message.includes('api-key-not-valid') || 
+        error.message.includes('API key') ||
+        error.message.includes('Invalid API key') ||
+        error.code === 'auth/api-key-not-valid'
+      )) {
+        setError(
+          'Firebase configuration error: Invalid API key. ' +
+          'Please update your Firebase credentials in firebase.js file. ' +
+          'Go to Firebase Console → Project Settings → Your apps → Copy the config values.'
+        )
+        return
+      }
+
+      if (error.message && (
+        error.message.includes('Firebase: Error') ||
+        error.message.includes('initializeApp')
+      )) {
+        setError(
+          'Firebase initialization error. Please check your Firebase configuration in firebase.js. ' +
+          'Make sure all credentials (apiKey, projectId, etc.) are correctly set from Firebase Console.'
+        )
+        return
+      }
       
       switch (error.code) {
         case 'auth/email-already-in-use':
@@ -89,22 +133,55 @@ function Register() {
         case 'auth/network-request-failed':
           setError('Network error. Please check your internet connection and try again.')
           break
+        case 'auth/invalid-api-key':
+        case 'auth/api-key-not-valid':
+          setError(
+            'Invalid Firebase API key. Please check your Firebase configuration in firebase.js. ' +
+            'Make sure you copied the correct API key from Firebase Console → Project Settings → Your apps.'
+          )
+          break
+        case 'auth/project-not-found':
+          setError(
+            'Firebase project not found. Please check your projectId in firebase.js. ' +
+            'Make sure it matches your Firebase project ID from Firebase Console.'
+          )
+          break
         default:
-          
-          if (error.message && (error.message.includes('network') || error.message.includes('ERR_CONNECTION'))) {
+
+          if (error.message && (
+            error.message.includes('network') || 
+            error.message.includes('ERR_CONNECTION') ||
+            error.message.includes('Failed to fetch') ||
+            error.message.includes('NetworkError')
+          )) {
             setError(
-              'Connection error. Please check: 1) Email/Password is enabled in Firebase Console ' +
-              '(Authentication → Sign-in method → Email/Password), 2) Your internet connection, 3) Try again in a few moments.'
+              'Network connection error. Please check:\n' +
+              '1. Your internet connection is working\n' +
+              '2. Email/Password authentication is enabled in Firebase Console\n' +
+              '   (Authentication → Sign-in method → Email/Password → Enable)\n' +
+              '3. Your Firebase configuration in firebase.js is correct\n' +
+              '4. Try refreshing the page and try again'
             )
             console.warn('Network error during registration:', error.message)
-          } else if (error.code === 'auth/operation-not-allowed') {
-           
-            setError('Email/Password authentication is not enabled. Please enable it in Firebase Console.')
-            console.warn('Email/Password authentication not enabled')
+          } else if (!error.code || error.code === 'auth/internal-error') {
+          
+            setError(
+              'Authentication error. Please verify:\n' +
+              '1. Firebase configuration in firebase.js is correct (check FIREBASE_SETUP.md)\n' +
+              '2. Email/Password authentication is enabled in Firebase Console\n' +
+              '3. Your internet connection is stable\n\n' +
+              `Error details: ${error.message || 'Unknown error'}`
+            )
+            console.warn('Registration error without specific code:', error)
           } else {
-            
             console.error('Unexpected registration error:', error)
-            setError(`Failed to create account. ${error.message || 'Please try again or contact support.'}`)
+            setError(
+              `Failed to create account: ${error.message || error.code || 'Unknown error'}\n\n` +
+              'If this persists, please check:\n' +
+              '1. Firebase configuration is correct\n' +
+              '2. Email/Password authentication is enabled\n' +
+              '3. Your internet connection'
+            )
           }
       }
     } finally {
@@ -169,9 +246,13 @@ function Register() {
 
       
       <main className="relative z-10 max-w-6xl mx-auto px-6 pb-16">
-        <section className="grid gap-12 lg:grid-cols-[1.05fr_1fr] items-center min-h-[calc(100vh-200px)]">
-          
-          <div className="space-y-8">
+        {!auth ? (
+          <section className="py-12">
+            <FirebaseConfigHelper />
+          </section>
+        ) : (
+          <section className="grid gap-12 lg:grid-cols-[1.05fr_1fr] items-center min-h-[calc(100vh-200px)]">
+            <div className="space-y-8">
             <div className="inline-flex items-center gap-2 px-4 py-1 rounded-full bg-white/80 text-[#db2b2b] text-sm font-medium shadow shadow-[#db2b2b]/10">
               <span className="w-2 h-2 rounded-full bg-[#db2b2b] animate-ping"></span>
               Join the mission
@@ -277,7 +358,7 @@ function Register() {
                   <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                   </svg>
-                  <span className="flex-1">{error}</span>
+                  <div className="flex-1 whitespace-pre-line">{error}</div>
                 </div>
               </div>
             )}
@@ -321,7 +402,8 @@ function Register() {
               Already have an account? <Link to="/login" className="text-[#db2b2b] font-medium hover:underline">Sign in</Link>
             </p>
           </form>
-        </section>
+          </section>
+        )}
       </main>
 
       

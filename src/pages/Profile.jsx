@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { db } from '../firebase'
+import { db } from '../../firebase'
 import { doc, setDoc, getDoc } from 'firebase/firestore'
 
 function Profile() {
@@ -22,6 +22,12 @@ function Profile() {
     const loadProfile = async () => {
       if (!currentUser) {
         navigate('/login')
+        return
+      }
+
+      if (!db) {
+        setError('Firestore database is not initialized. Please configure Firebase.')
+        setLoadingProfile(false)
         return
       }
 
@@ -61,6 +67,10 @@ function Profile() {
     try {
       if (!currentUser) {
         throw new Error('User not authenticated')
+      }
+
+      if (!db) {
+        throw new Error('Firestore database is not initialized. Please configure Firebase.')
       }
 
       const profileRef = doc(db, 'users', currentUser.uid)

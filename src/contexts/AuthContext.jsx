@@ -3,7 +3,7 @@ import {
   onAuthStateChanged, 
   signOut as firebaseSignOut
 } from 'firebase/auth'
-import { auth } from '../firebase'
+import { auth } from '../../firebase'
 
 const AuthContext = createContext({})
 
@@ -21,24 +21,39 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null)
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(
-      auth,
-      (user) => {
-        setCurrentUser(user)
-        setLoading(false)
-        setError(null)
-      },
-      (error) => {
-        console.error('Auth state change error:', error)
-        setError(error)
-        setLoading(false)
-      }
-    )
-    
-    return () => unsubscribe()
+    if (!auth) {
+      const configError = new Error('Firebase not configured. Please update firebase.js with your Firebase credentials from Firebase Console.')
+      setError(configError)
+      setLoading(false)
+      return
+    }
+
+    try {
+      const unsubscribe = onAuthStateChanged(
+        auth,
+        (user) => {
+          setCurrentUser(user)
+          setLoading(false)
+          setError(null)
+        },
+        (error) => {
+          console.error('Auth state change error:', error)
+          setError(error)
+          setLoading(false)
+        }
+      )
+      return () => unsubscribe()
+    } catch (error) {
+      console.error('Error setting up auth listener:', error)
+      setError(error)
+      setLoading(false)
+    }
   }, [])
 
   const signOut = async () => {
+    if (!auth) {
+      return { success: false, error: 'Firebase not configured' }
+    }
     try {
       await firebaseSignOut(auth)
       setCurrentUser(null)
