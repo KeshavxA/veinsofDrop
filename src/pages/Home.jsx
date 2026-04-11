@@ -1,8 +1,12 @@
 import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { db } from '../firebase' 
+import { db } from '../../firebase' 
 import { collection, addDoc, getDocs } from 'firebase/firestore'
+import {
+  donorCanHelpRecipient,
+  normalizeBloodType,
+} from '../utils/bloodCompatibility'
 
 function Home() {
   const { currentUser, signOut, isAuthenticated } = useAuth()
@@ -29,8 +33,17 @@ function Home() {
   const [emergencyLevel, setEmergencyLevel] = useState("normal")
   const [hospitalLocation, setHospitalLocation] = useState("")
 
+  const [recipientBloodFilter, setRecipientBloodFilter] = useState("")
+  const [urgentRequests, setUrgentRequests] = useState([])
+
 
   const fetchDonors = async () => {
+    if (!db) {
+      console.error("Firestore database is not initialized. Please configure Firebase.");
+      setLoading(false);
+      return;
+    }
+    
     setLoading(true);
     try {
       const donorsRef = collection(db, "donors");
@@ -47,22 +60,61 @@ function Home() {
     setLoading(false);
   };
 
+  const fetchUrgentRequests = async () => {
+    if (!db) return
+    try {
+      const snap = await getDocs(collection(db, 'requests'))
+      const list = snap.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
+      }))
+      const urgent = list.filter(
+        (r) =>
+          (r.emergencyLevel === 'urgent' || r.emergencyLevel === 'critical') &&
+          r.status !== 'fulfilled'
+      )
+      urgent.sort((a, b) => {
+        const ta =
+          a.createdAt?.toDate?.() ?? new Date(a.createdAt || 0)
+        const tb =
+          b.createdAt?.toDate?.() ?? new Date(b.createdAt || 0)
+        return tb - ta
+      })
+      setUrgentRequests(urgent.slice(0, 6))
+    } catch (e) {
+      console.error('Error fetching urgent requests:', e)
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated) {
-      fetchDonors();
-      
-      if(currentUser?.email) {
-        setDonorEmail(currentUser.email);
-        setRequestEmail(currentUser.email);
+      fetchDonors()
+      fetchUrgentRequests()
+
+      if (currentUser?.email) {
+        setDonorEmail(currentUser.email)
+        setRequestEmail(currentUser.email)
       }
     }
-    console.log("Current path:", location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, currentUser, location])
 
-  }, [isAuthenticated, currentUser, location]);
+  const visibleDonors = donors.filter(d => d.email !== currentUser?.email)
 
-  const visibleDonors = donors.filter(d => d.email !== currentUser?.email);
+  const matchedDonors =
+    recipientBloodFilter && normalizeBloodType(recipientBloodFilter)
+      ? visibleDonors.filter((d) =>
+          donorCanHelpRecipient(d.bloodGroup, recipientBloodFilter)
+        )
+      : visibleDonors
 
   const handleBecomeDonorClick = () => {
+    if (!isAuthenticated) {
+      alert("Please login first to become a donor.");
+      navigate('/login');
+      return;
+    }
+    
     const isAlreadyDonorByEmail = donors.some(d => d.email === currentUser?.email);
     
     if (isAlreadyDonorByEmail) {
@@ -76,6 +128,12 @@ function Home() {
     const body = `Hello ${donor.name},%0D%0A%0D%0AI found your profile on veinsofDrop and I am in need of ${donor.bloodGroup} blood donation.%0D%0A%0D%0ALocation: ${donor.location}%0D%0A%0D%0APlease let me know if you are available to help.%0D%0A%0D%0ARequested by: ${currentUser?.email}`;
     
     window.location.href = `mailto:${donor.email}?subject=${subject}&body=${body}`;
+    
+    if (!db) {
+      console.warn("Firestore database is not initialized. Contact request not logged.");
+      return;
+    }
+    
     try {
       await addDoc(collection(db, "contact_requests"), {
         requesterEmail: currentUser?.email,
@@ -102,6 +160,12 @@ function Home() {
   const handleDonorSubmit = async (e) => {
     e.preventDefault()
 
+    if (!isAuthenticated) {
+      alert("Please login first to become a donor.");
+      navigate('/login');
+      return;
+    }
+
     if (donorPhone.length !== 10 || isNaN(donorPhone)) {
         alert("Please enter a valid 10-digit phone number.");
         return;
@@ -114,6 +178,11 @@ function Home() {
     if (duplicateFound) {
         alert("Registration Failed: A donor with this Email or Phone Number already exists.");
         return; 
+    }
+
+    if (!db) {
+      alert("Firestore database is not initialized. Please configure Firebase.");
+      return;
     }
 
     try {
@@ -140,12 +209,32 @@ function Home() {
     }
   }
 
+  const handleRequestClick = () => {
+    if (!isAuthenticated) {
+      alert("Please login first to request blood.");
+      navigate('/login');
+      return;
+    }
+    setShowRequestPopup(true);
+  }
+
   const handleRequestSubmit = async (e) => {
     e.preventDefault()
+
+    if (!isAuthenticated) {
+      alert("Please login first to request blood.");
+      navigate('/login');
+      return;
+    }
 
     if (requestPhone.length !== 10 || isNaN(requestPhone)) {
         alert("Please enter a valid 10-digit phone number.");
         return;
+    }
+
+    if (!db) {
+      alert("Firestore database is not initialized. Please configure Firebase.");
+      return;
     }
 
     try {
@@ -195,7 +284,7 @@ function Home() {
               Donor
             </button>
             <button 
-              onClick={() => setShowRequestPopup(true)}
+              onClick={handleRequestClick}
               className="text-white hover:text-red-700 font-semibold text-sm px-2 py-1"
               type="button"
             >
@@ -240,7 +329,7 @@ function Home() {
               </li>
               <li>
                 <button 
-                  onClick={() => setShowRequestPopup(true)}
+                  onClick={handleRequestClick}
                   className="text-white hover:text-red-700 font-semibold bg-transparent border-none cursor-pointer p-0"
                   type="button"
                 >
@@ -283,21 +372,113 @@ function Home() {
                 <div className="flex justify-between items-center mb-6 border-b pb-2">
                     <h3 className="text-2xl font-bold text-gray-800">Available Donors</h3>
                     <button 
-                        onClick={fetchDonors}
+                        onClick={() => { fetchDonors(); fetchUrgentRequests() }}
                         className="bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-lg hover:bg-gray-300 transition"
                     > 
                       Refresh List
                     </button>
                 </div>
-                <p className="text-gray-500 mb-4 text-sm">Availability of donors nearby</p>
+
+                {urgentRequests.length > 0 && (
+                  <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                    <div className="flex flex-wrap items-center gap-2 mb-3">
+                      <span className="inline-flex h-2 w-2 animate-pulse rounded-full bg-amber-500" aria-hidden />
+                      <h4 className="text-sm font-bold uppercase tracking-wide text-amber-900">
+                        Urgent &amp; critical requests
+                      </h4>
+                      <span className="text-xs text-amber-800/90">
+                        Open needs from your community — filter donors by compatibility below.
+                      </span>
+                    </div>
+                    <ul className="space-y-2">
+                      {urgentRequests.map((req) => (
+                        <li
+                          key={req.id}
+                          className="flex flex-col gap-2 rounded-lg bg-white/80 p-3 text-sm text-gray-800 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div>
+                            <span className="font-semibold text-[#db2b2b]">{req.bloodGroup || '—'}</span>
+                            <span className="mx-2 text-gray-400">·</span>
+                            {req.hospitalLocation || 'Location not specified'}
+                            {req.emergencyLevel === 'critical' && (
+                              <span className="ml-2 rounded bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
+                                CRITICAL
+                              </span>
+                            )}
+                            {req.emergencyLevel === 'urgent' && (
+                              <span className="ml-2 rounded bg-orange-500 px-2 py-0.5 text-xs font-bold text-white">
+                                URGENT
+                              </span>
+                            )}
+                          </div>
+                          {req.bloodGroup && (
+                            <button
+                              type="button"
+                              onClick={() => setRecipientBloodFilter(req.bloodGroup)}
+                              className="shrink-0 rounded-lg border border-[#db2b2b] bg-white px-3 py-1.5 text-xs font-semibold text-[#db2b2b] hover:bg-red-50"
+                            >
+                              Show compatible donors
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                <div className="mb-4 flex flex-col gap-2 rounded-lg border border-gray-200 bg-gray-50/80 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="min-w-[200px] flex-1">
+                    <label htmlFor="recipient-filter" className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Patient needs (whole-blood compatibility)
+                    </label>
+                    <select
+                      id="recipient-filter"
+                      value={recipientBloodFilter}
+                      onChange={(e) => setRecipientBloodFilter(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#db2b2b] focus:outline-none focus:ring-2 focus:ring-[#db2b2b]/30"
+                    >
+                      <option value="">All donor types</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                  </div>
+                  {recipientBloodFilter ? (
+                    <button
+                      type="button"
+                      onClick={() => setRecipientBloodFilter('')}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100"
+                    >
+                      Clear filter
+                    </button>
+                  ) : null}
+                  <p className="w-full text-xs text-gray-500 sm:w-auto sm:flex-1 sm:min-w-[220px]">
+                    Only donors whose blood type can supply this patient (standard RBC rules) are listed.
+                  </p>
+                </div>
+
+                <p className="text-gray-500 mb-4 text-sm">
+                  {recipientBloodFilter
+                    ? `Showing ${matchedDonors.length} compatible donor${matchedDonors.length === 1 ? '' : 's'} for patient needing ${recipientBloodFilter}.`
+                    : 'Availability of donors nearby'}
+                </p>
 
                 {loading ? (
                   <div className="text-center py-10">
                     <p className="text-gray-500 text-lg">Loading donor data...</p>
                   </div>
-                ) : visibleDonors.length === 0 ? ( 
+                ) : matchedDonors.length === 0 ? ( 
                   <div className="text-center py-10">
-                    <p className="text-gray-500">No other donors available yet. Be the first to donate!</p>
+                    <p className="text-gray-500">
+                      {recipientBloodFilter
+                        ? `No registered donors match whole-blood compatibility for patient needing ${recipientBloodFilter}. Try another type or clear the filter.`
+                        : 'No other donors available yet. Be the first to donate!'}
+                    </p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -314,7 +495,7 @@ function Home() {
                               </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {visibleDonors.map((donor, index) => (
+                            {matchedDonors.map((donor, index) => (
                             <tr key={donor.id || index}>
                                       
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -385,7 +566,7 @@ function Home() {
                         Donate Now
                       </button>
                       <button 
-                        onClick={() => setShowRequestPopup(true)}
+                        onClick={handleRequestClick}
                         className="px-8 py-3 bg-white text-[#db2b2b] border-2 border-[#db2b2b] rounded-full font-bold hover:bg-red-50 transition"
                       >
                         Find Blood
