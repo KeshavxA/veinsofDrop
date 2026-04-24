@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { db } from '../../firebase' 
-import { collection, addDoc, getDocs } from 'firebase/firestore'
+import { collection, addDoc, getDocs, doc, getDoc } from 'firebase/firestore'
 import {
   donorCanHelpRecipient,
   normalizeBloodType,
@@ -35,6 +35,33 @@ function Home() {
 
   const [recipientBloodFilter, setRecipientBloodFilter] = useState("")
   const [urgentRequests, setUrgentRequests] = useState([])
+  const [onlyCompatible, setOnlyCompatible] = useState(true)
+
+  const [searchQuery, setSearchQuery] = useState('')
+  const [cityFilter, setCityFilter] = useState('')
+  const [donorBloodFilter, setDonorBloodFilter] = useState('')
+  const [minUnitsFilter, setMinUnitsFilter] = useState('')
+  const [sortMode, setSortMode] = useState('same_city')
+  const [currentUserProfile, setCurrentUserProfile] = useState(null)
+
+  const asDate = (value) => {
+    if (!value) return null
+    if (typeof value?.toDate === 'function') return value.toDate()
+    const d = new Date(value)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+
+  const normText = (v) => (v == null ? '' : String(v)).trim().toLowerCase()
+
+  const fetchCurrentUserProfile = async () => {
+    if (!db || !currentUser?.uid) return
+    try {
+      const snap = await getDoc(doc(db, 'users', currentUser.uid))
+      if (snap.exists()) setCurrentUserProfile(snap.data())
+    } catch (e) {
+      console.error('Error fetching user profile:', e)
+    }
+  }
 
 
   const fetchDonors = async () => {
@@ -90,6 +117,7 @@ function Home() {
     if (isAuthenticated) {
       fetchDonors()
       fetchUrgentRequests()
+      fetchCurrentUserProfile()
 
       if (currentUser?.email) {
         setDonorEmail(currentUser.email)
@@ -101,12 +129,65 @@ function Home() {
 
   const visibleDonors = donors.filter(d => d.email !== currentUser?.email)
 
+  const recipientType = normalizeBloodType(recipientBloodFilter)
+  const userCity = normText(currentUserProfile?.location)
+
+  const filteredDonors = visibleDonors
+    .filter((d) => {
+      const q = normText(searchQuery)
+      if (!q) return true
+      const hay = [
+        d.name,
+        d.email,
+        d.phone,
+        d.location,
+        d.bloodGroup,
+      ]
+        .map(normText)
+        .join(' ')
+      return hay.includes(q)
+    })
+    .filter((d) => {
+      const city = normText(cityFilter)
+      if (!city) return true
+      return normText(d.location) === city
+    })
+    .filter((d) => {
+      const bt = normalizeBloodType(donorBloodFilter)
+      if (!bt) return true
+      return normalizeBloodType(d.bloodGroup) === bt
+    })
+    .filter((d) => {
+      const min = minUnitsFilter === '' ? null : Number(minUnitsFilter)
+      if (min == null || Number.isNaN(min)) return true
+      const units = Number(d.availablequantity ?? d.availableQuantity ?? 0)
+      return units >= min
+    })
+
   const matchedDonors =
-    recipientBloodFilter && normalizeBloodType(recipientBloodFilter)
-      ? visibleDonors.filter((d) =>
-          donorCanHelpRecipient(d.bloodGroup, recipientBloodFilter)
+    onlyCompatible && recipientType
+      ? filteredDonors.filter((d) =>
+          donorCanHelpRecipient(d.bloodGroup, recipientType)
         )
-      : visibleDonors
+      : filteredDonors
+
+  const sortedDonors = [...matchedDonors].sort((a, b) => {
+    const unitsA = Number(a.availablequantity ?? a.availableQuantity ?? 0)
+    const unitsB = Number(b.availablequantity ?? b.availableQuantity ?? 0)
+    const lastA = asDate(a.lastActiveAt) ?? asDate(a.createdAt) ?? new Date(0)
+    const lastB = asDate(b.lastActiveAt) ?? asDate(b.createdAt) ?? new Date(0)
+
+    if (sortMode === 'units_desc') return unitsB - unitsA
+    if (sortMode === 'last_active') return lastB - lastA
+
+    if (sortMode === 'same_city' && userCity) {
+      const aSame = normText(a.location) === userCity ? 0 : 1
+      const bSame = normText(b.location) === userCity ? 0 : 1
+      if (aSame !== bSame) return aSame - bSame
+    }
+
+    return lastB - lastA
+  })
 
   const handleBecomeDonorClick = () => {
     if (!isAuthenticated) {
@@ -448,6 +529,15 @@ function Home() {
                       <option value="O-">O-</option>
                     </select>
                   </div>
+                  <label className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={onlyCompatible}
+                      onChange={(e) => setOnlyCompatible(e.target.checked)}
+                      className="h-4 w-4 accent-[#db2b2b]"
+                    />
+                    Only show compatible donors
+                  </label>
                   {recipientBloodFilter ? (
                     <button
                       type="button"
@@ -458,26 +548,104 @@ function Home() {
                     </button>
                   ) : null}
                   <p className="w-full text-xs text-gray-500 sm:w-auto sm:flex-1 sm:min-w-[220px]">
-                    Only donors whose blood type can supply this patient (standard RBC rules) are listed.
+                    {onlyCompatible
+                      ? 'Only donors whose blood type can supply this patient (standard RBC rules) are listed.'
+                      : 'Compatibility is shown per donor when a patient type is selected.'}
                   </p>
                 </div>
 
+                <div className="mb-5 grid grid-cols-1 gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:grid-cols-12">
+                  <div className="md:col-span-4">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Search
+                    </label>
+                    <input
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Name, email, phone, city…"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#db2b2b] focus:outline-none focus:ring-2 focus:ring-[#db2b2b]/30"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      City
+                    </label>
+                    <input
+                      value={cityFilter}
+                      onChange={(e) => setCityFilter(e.target.value)}
+                      placeholder={currentUserProfile?.location ? `e.g. ${currentUserProfile.location}` : 'e.g. Pune'}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#db2b2b] focus:outline-none focus:ring-2 focus:ring-[#db2b2b]/30"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Donor blood
+                    </label>
+                    <select
+                      value={donorBloodFilter}
+                      onChange={(e) => setDonorBloodFilter(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#db2b2b] focus:outline-none focus:ring-2 focus:ring-[#db2b2b]/30"
+                    >
+                      <option value="">Any</option>
+                      <option value="A+">A+</option>
+                      <option value="A-">A-</option>
+                      <option value="B+">B+</option>
+                      <option value="B-">B-</option>
+                      <option value="AB+">AB+</option>
+                      <option value="AB-">AB-</option>
+                      <option value="O+">O+</option>
+                      <option value="O-">O-</option>
+                    </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Min units
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={minUnitsFilter}
+                      onChange={(e) => setMinUnitsFilter(e.target.value)}
+                      placeholder="0"
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#db2b2b] focus:outline-none focus:ring-2 focus:ring-[#db2b2b]/30"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-600">
+                      Sort
+                    </label>
+                    <select
+                      value={sortMode}
+                      onChange={(e) => setSortMode(e.target.value)}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-[#db2b2b] focus:outline-none focus:ring-2 focus:ring-[#db2b2b]/30"
+                    >
+                      <option value="same_city">Same city first</option>
+                      <option value="last_active">Last active</option>
+                      <option value="units_desc">Units (high → low)</option>
+                    </select>
+                  </div>
+                </div>
+
                 <p className="text-gray-500 mb-4 text-sm">
-                  {recipientBloodFilter
-                    ? `Showing ${matchedDonors.length} compatible donor${matchedDonors.length === 1 ? '' : 's'} for patient needing ${recipientBloodFilter}.`
-                    : 'Availability of donors nearby'}
+                  {recipientType && onlyCompatible
+                    ? `Showing ${sortedDonors.length} compatible donor${sortedDonors.length === 1 ? '' : 's'} for patient needing ${recipientType}.`
+                    : `Showing ${sortedDonors.length} donor${sortedDonors.length === 1 ? '' : 's'}.`}
                 </p>
 
                 {loading ? (
                   <div className="text-center py-10">
                     <p className="text-gray-500 text-lg">Loading donor data...</p>
                   </div>
-                ) : matchedDonors.length === 0 ? ( 
+                ) : sortedDonors.length === 0 ? ( 
                   <div className="text-center py-10">
                     <p className="text-gray-500">
-                      {recipientBloodFilter
-                        ? `No registered donors match whole-blood compatibility for patient needing ${recipientBloodFilter}. Try another type or clear the filter.`
-                        : 'No other donors available yet. Be the first to donate!'}
+                      {recipientType && onlyCompatible
+                        ? `No registered donors match whole-blood compatibility for patient needing ${recipientType}. Try another type or turn off compatibility filter.`
+                        : 'No donors match your filters. Try clearing search/filters.'}
                     </p>
                   </div>
                 ) : (
@@ -490,12 +658,13 @@ function Home() {
                                 <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">CONTACT</td>
                                 <td className="px-6 py-3 text-left text-xs font-medium text-gray-600  uppercase tracking-wider">BLOOD TYPE</td>
                                 <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">LOCATION</td>
+                                <td className="px-6 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wider">LAST ACTIVE</td>
                                 <td className="px-6 py-3 text-left text-xs font-medium  text-gray-600 uppercase tracking-wider">AVAILABLE QUANTITY</td>
                                 <td className="px-6 py-3 text-right text-xs font-medium text-gray-600 uppercase tracking-wider">REQUEST</td>
                               </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {matchedDonors.map((donor, index) => (
+                            {sortedDonors.map((donor, index) => (
                             <tr key={donor.id || index}>
                                       
                             <td className="px-6 py-4 whitespace-nowrap">
@@ -523,9 +692,22 @@ function Home() {
                                           }`}>
                                               {donor.bloodGroup}
                                           </span>
+                                          {recipientType && !onlyCompatible && (
+                                            <div className="mt-1 text-xs text-gray-500">
+                                              {donorCanHelpRecipient(donor.bloodGroup, recipientType)
+                                                ? `${normalizeBloodType(donor.bloodGroup) || donor.bloodGroup} → ${recipientType} (compatible)`
+                                                : `${normalizeBloodType(donor.bloodGroup) || donor.bloodGroup} → ${recipientType} (not compatible)`}
+                                            </div>
+                                          )}
                                       </td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                           {donor.location}
+                                      </td>
+                                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                                        {(() => {
+                                          const d = asDate(donor.lastActiveAt) ?? asDate(donor.createdAt)
+                                          return d ? d.toLocaleDateString() : '—'
+                                        })()}
                                       </td>
                                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                                           {donor.availablequantity}

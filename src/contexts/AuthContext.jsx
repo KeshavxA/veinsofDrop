@@ -3,7 +3,17 @@ import {
   onAuthStateChanged, 
   signOut as firebaseSignOut
 } from 'firebase/auth'
-import { auth } from '../../firebase'
+import { auth, db } from '../../firebase'
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 
 const AuthContext = createContext({})
 
@@ -20,6 +30,31 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  const updateLastActive = async (user) => {
+    if (!db || !user?.uid) return
+    try {
+      // Track activity on the user profile doc (used by Profile page).
+      await setDoc(
+        doc(db, 'users', user.uid),
+        { lastActiveAt: serverTimestamp(), email: user.email || null },
+        { merge: true }
+      )
+
+      // If the user has a donor record, update it too (so donor directory can sort by last active).
+      const donorsRef = collection(db, 'donors')
+      const q = query(donorsRef, where('userId', '==', user.uid))
+      const snap = await getDocs(q)
+      await Promise.all(
+        snap.docs.map((d) =>
+          updateDoc(d.ref, { lastActiveAt: serverTimestamp() })
+        )
+      )
+    } catch (e) {
+      // Non-blocking: app should still work even if activity tracking fails.
+      console.warn('Failed to update last active timestamp:', e)
+    }
+  }
+
   useEffect(() => {
     if (!auth) {
       const configError = new Error('Firebase not configured. Please update firebase.js with your Firebase credentials from Firebase Console.')
@@ -35,6 +70,7 @@ export const AuthProvider = ({ children }) => {
           setCurrentUser(user)
           setLoading(false)
           setError(null)
+          if (user) updateLastActive(user)
         },
         (error) => {
           console.error('Auth state change error:', error)
