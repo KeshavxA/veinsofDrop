@@ -46,7 +46,8 @@ function Home() {
   const [minUnitsFilter, setMinUnitsFilter] = useState('')
   const [sortMode, setSortMode] = useState('same_city')
   const [currentUserProfile, setCurrentUserProfile] = useState(null)
-  const [reportTarget, setReportTarget] = useState(null) // { id, type, name }
+  const [reportTarget, setReportTarget] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   const asDate = (value) => {
     if (!value) return null
@@ -75,6 +76,13 @@ function Home() {
       setRequestEmail(currentUser.email)
     }
     fetchCurrentUserProfile()
+
+    // Check admin role
+    if (currentUser?.uid && db) {
+      getDoc(doc(db, 'users', currentUser.uid)).then((snap) => {
+        setIsAdmin(snap.data()?.role === 'admin')
+      }).catch(() => { })
+    }
 
     const donorsUnsub = onSnapshot(
       collection(db, 'donors'),
@@ -395,6 +403,19 @@ function Home() {
                   Profile
                 </Link>
               </li>
+              {isAdmin && (
+                <li>
+                  <Link
+                    to="/admin"
+                    className={`font-semibold transition-colors ${location.pathname.startsWith('/admin')
+                      ? 'text-white font-bold'
+                      : 'text-gray-100 hover:text-red-700'
+                      }`}
+                  >
+                    ⚙ Admin
+                  </Link>
+                </li>
+              )}
               <li>
                 <button
                   onClick={handleBecomeDonorClick}

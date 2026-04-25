@@ -11,7 +11,7 @@ function Profile() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingProfile, setLoadingProfile] = useState(true)
-  const [verificationStatus, setVerificationStatus] = useState(null) // null | 'pending' | 'verified'
+  const [verificationStatus, setVerificationStatus] = useState(null)
   const [verifyLoading, setVerifyLoading] = useState(false)
   const [verifyMsg, setVerifyMsg] = useState('')
   const [myRequests, setMyRequests] = useState([])
@@ -41,7 +41,6 @@ function Profile() {
         const profileSnap = await getDoc(profileRef)
         if (profileSnap.exists()) setProfileData(profileSnap.data())
 
-        // Check donor verified status
         const donorQ = query(collection(db, 'donors'), where('userId', '==', currentUser.uid))
         const donorSnap = await getDocs(donorQ)
         if (!donorSnap.empty) {
@@ -49,7 +48,6 @@ function Profile() {
           setVerificationStatus(donorData.verified ? 'verified' : 'unverified')
         }
 
-        // Check if there is already a pending verification request
         const verQ = query(
           collection(db, 'verificationRequests'),
           where('userId', '==', currentUser.uid),
@@ -58,7 +56,6 @@ function Profile() {
         const verSnap = await getDocs(verQ)
         if (!verSnap.empty) setVerificationStatus('pending')
 
-        // Load user's own blood requests
         setLoadingRequests(true)
         const reqQ = query(collection(db, 'requests'), where('userId', '==', currentUser.uid))
         const reqSnap = await getDocs(reqQ)
@@ -140,7 +137,7 @@ function Profile() {
         name: profileData.name || '',
         phone: profileData.phone || '',
         bloodType: profileData.bloodType || '',
-        status: 'pending',   // admin sets to 'approved' or 'rejected'
+        status: 'pending',
         createdAt: serverTimestamp(),
       })
       setVerificationStatus('pending')
@@ -280,7 +277,6 @@ function Profile() {
             </div>
           </form>
 
-          {/* ── Donor Verification Card ───────────────────────────────────────── */}
           <div className="mt-8 rounded-xl border border-blue-100 bg-blue-50/60 p-6">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-blue-600 text-xl">🛡️</span>
@@ -326,8 +322,6 @@ function Profile() {
                 }`}>{verifyMsg}</p>
             )}
           </div>
-
-          {/* ── My Blood Requests ─────────────────────────────────────────── */}
           <div className="mt-8 rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
             <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
               <span className="text-base">🩸</span>
