@@ -9,6 +9,7 @@ import Home from './src/pages/Home'
 import Login from './src/pages/Login'
 import Register from './src/pages/Register'
 import Profile from './src/pages/Profile'
+import RequestDetail from './src/pages/RequestDetail'
 
 function App() {
 
@@ -30,6 +31,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
+            <Route path="/request/:id" element={<RequestDetail />} />
           </Routes>
         </NotificationProvider>
       </AuthProvider>

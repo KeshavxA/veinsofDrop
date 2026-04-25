@@ -472,8 +472,8 @@ function Home() {
                       key={req.id}
                       className="flex flex-col gap-2 rounded-lg bg-white/80 p-3 text-sm text-gray-800 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div>
-                        <span className="font-semibold text-[#db2b2b]">{req.bloodGroup || '—'}</span>
+                      <Link to={`/request/${req.id}`} className="flex-1 min-w-0 hover:underline">
+                        <span className="font-semibold text-[#db2b2b]">{req.bloodGroup || '\u2014'}</span>
                         <span className="mx-2 text-gray-400">·</span>
                         {req.hospitalLocation || 'Location not specified'}
                         {req.emergencyLevel === 'critical' && (
@@ -486,15 +486,21 @@ function Home() {
                             URGENT
                           </span>
                         )}
-                      </div>
+                      </Link>
                       <div className="flex items-center gap-2 shrink-0">
+                        <Link
+                          to={`/request/${req.id}`}
+                          className="rounded-lg border border-[#db2b2b] bg-white px-3 py-1.5 text-xs font-semibold text-[#db2b2b] hover:bg-red-50"
+                        >
+                          View & Donate
+                        </Link>
                         {req.bloodGroup && (
                           <button
                             type="button"
                             onClick={() => setRecipientBloodFilter(req.bloodGroup)}
-                            className="rounded-lg border border-[#db2b2b] bg-white px-3 py-1.5 text-xs font-semibold text-[#db2b2b] hover:bg-red-50"
+                            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"
                           >
-                            Show compatible donors
+                            Filter donors
                           </button>
                         )}
                         <button

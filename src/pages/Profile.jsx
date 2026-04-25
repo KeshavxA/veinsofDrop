@@ -14,6 +14,8 @@ function Profile() {
   const [verificationStatus, setVerificationStatus] = useState(null) // null | 'pending' | 'verified'
   const [verifyLoading, setVerifyLoading] = useState(false)
   const [verifyMsg, setVerifyMsg] = useState('')
+  const [myRequests, setMyRequests] = useState([])
+  const [loadingRequests, setLoadingRequests] = useState(false)
   const [profileData, setProfileData] = useState({
     name: '',
     phone: '',
@@ -55,6 +57,20 @@ function Profile() {
         )
         const verSnap = await getDocs(verQ)
         if (!verSnap.empty) setVerificationStatus('pending')
+
+        // Load user's own blood requests
+        setLoadingRequests(true)
+        const reqQ = query(collection(db, 'requests'), where('userId', '==', currentUser.uid))
+        const reqSnap = await getDocs(reqQ)
+        const reqs = reqSnap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => {
+            const ta = a.createdAt?.toDate?.()?.getTime() ?? 0
+            const tb = b.createdAt?.toDate?.()?.getTime() ?? 0
+            return tb - ta
+          })
+        setMyRequests(reqs)
+        setLoadingRequests(false)
       } catch (err) {
         console.error('Error loading profile:', err)
         setError('Failed to load profile data')
@@ -308,6 +324,65 @@ function Profile() {
             {verifyMsg && (
               <p className={`mt-3 text-sm font-medium ${verifyMsg.includes('Failed') ? 'text-red-600' : 'text-green-700'
                 }`}>{verifyMsg}</p>
+            )}
+          </div>
+
+          {/* ── My Blood Requests ─────────────────────────────────────────── */}
+          <div className="mt-8 rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+            <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-100">
+              <span className="text-base">🩸</span>
+              <h3 className="text-base font-bold text-gray-800">My Blood Requests</h3>
+              {myRequests.length > 0 && (
+                <span className="ml-auto text-xs font-semibold text-[#db2b2b] bg-red-50 border border-red-100 px-2 py-0.5 rounded-full">
+                  {myRequests.length}
+                </span>
+              )}
+            </div>
+
+            {loadingRequests ? (
+              <p className="text-center text-sm text-gray-400 py-8">Loading…</p>
+            ) : myRequests.length === 0 ? (
+              <div className="text-center py-10">
+                <p className="text-3xl mb-2">📋</p>
+                <p className="text-sm text-gray-500">You haven't submitted any blood requests yet.</p>
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-50">
+                {myRequests.map((req) => {
+                  const statusColors = {
+                    pending: 'bg-gray-100 text-gray-600',
+                    contacted: 'bg-blue-100 text-blue-700',
+                    accepted: 'bg-emerald-100 text-emerald-700',
+                    fulfilled: 'bg-red-100 text-red-700',
+                  }
+                  const dateStr = req.createdAt?.toDate?.()?.toLocaleDateString('en-IN', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                  }) ?? '—'
+                  return (
+                    <li key={req.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-[#db2b2b]">{req.bloodGroup || '?'}</span>
+                          <span className="text-xs text-gray-500">·</span>
+                          <span className="text-sm text-gray-700 truncate max-w-[200px]">{req.hospitalLocation || '—'}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{dateStr} · {req.unitsRequired || '?'} unit(s)</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${statusColors[req.status] || statusColors.pending}`}>
+                          {(req.status || 'pending').charAt(0).toUpperCase() + (req.status || 'pending').slice(1)}
+                        </span>
+                        <Link
+                          to={`/request/${req.id}`}
+                          className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-[#db2b2b] text-[#db2b2b] hover:bg-red-50 transition-colors"
+                        >
+                          View →
+                        </Link>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
             )}
           </div>
         </div>
