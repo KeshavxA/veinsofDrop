@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
-import { 
-  onAuthStateChanged, 
+import {
+  onAuthStateChanged,
   signOut as firebaseSignOut
 } from 'firebase/auth'
 import { auth, db } from '../../firebase'
@@ -33,14 +33,12 @@ export const AuthProvider = ({ children }) => {
   const updateLastActive = async (user) => {
     if (!db || !user?.uid) return
     try {
-      // Track activity on the user profile doc (used by Profile page).
       await setDoc(
         doc(db, 'users', user.uid),
         { lastActiveAt: serverTimestamp(), email: user.email || null },
         { merge: true }
       )
 
-      // If the user has a donor record, update it too (so donor directory can sort by last active).
       const donorsRef = collection(db, 'donors')
       const q = query(donorsRef, where('userId', '==', user.uid))
       const snap = await getDocs(q)
@@ -50,7 +48,6 @@ export const AuthProvider = ({ children }) => {
         )
       )
     } catch (e) {
-      // Non-blocking: app should still work even if activity tracking fails.
       console.warn('Failed to update last active timestamp:', e)
     }
   }
