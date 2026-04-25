@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { db } from '../../firebase'
-import { doc, setDoc, getDoc } from 'firebase/firestore'
+import { doc, setDoc, getDoc, addDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore'
 
 function Profile() {
   const { currentUser, signOut } = useAuth()
@@ -11,6 +11,9 @@ function Profile() {
   const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
   const [loadingProfile, setLoadingProfile] = useState(true)
+  const [verificationStatus, setVerificationStatus] = useState(null) // null | 'pending' | 'verified'
+  const [verifyLoading, setVerifyLoading] = useState(false)
+  const [verifyMsg, setVerifyMsg] = useState('')
   const [profileData, setProfileData] = useState({
     name: '',
     phone: '',
@@ -34,10 +37,24 @@ function Profile() {
       try {
         const profileRef = doc(db, 'users', currentUser.uid)
         const profileSnap = await getDoc(profileRef)
-        
-        if (profileSnap.exists()) {
-          setProfileData(profileSnap.data())
+        if (profileSnap.exists()) setProfileData(profileSnap.data())
+
+        // Check donor verified status
+        const donorQ = query(collection(db, 'donors'), where('userId', '==', currentUser.uid))
+        const donorSnap = await getDocs(donorQ)
+        if (!donorSnap.empty) {
+          const donorData = donorSnap.docs[0].data()
+          setVerificationStatus(donorData.verified ? 'verified' : 'unverified')
         }
+
+        // Check if there is already a pending verification request
+        const verQ = query(
+          collection(db, 'verificationRequests'),
+          where('userId', '==', currentUser.uid),
+          where('status', '==', 'pending')
+        )
+        const verSnap = await getDocs(verQ)
+        if (!verSnap.empty) setVerificationStatus('pending')
       } catch (err) {
         console.error('Error loading profile:', err)
         setError('Failed to load profile data')
@@ -96,6 +113,30 @@ function Profile() {
     }
   }
 
+  const handleRequestVerification = async () => {
+    if (!currentUser || !db) return
+    setVerifyLoading(true)
+    setVerifyMsg('')
+    try {
+      await addDoc(collection(db, 'verificationRequests'), {
+        userId: currentUser.uid,
+        email: currentUser.email,
+        name: profileData.name || '',
+        phone: profileData.phone || '',
+        bloodType: profileData.bloodType || '',
+        status: 'pending',   // admin sets to 'approved' or 'rejected'
+        createdAt: serverTimestamp(),
+      })
+      setVerificationStatus('pending')
+      setVerifyMsg('Verification request submitted! Our team will review within 24\u00a0hours.')
+    } catch (err) {
+      console.error('Verification request error:', err)
+      setVerifyMsg('Failed to submit. Please try again.')
+    } finally {
+      setVerifyLoading(false)
+    }
+  }
+
   if (loadingProfile) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#e6fffb]">
@@ -114,7 +155,7 @@ function Profile() {
           <Link to="/" className="flex items-center gap-3">
             <img src="/assets/logo.png" alt="veinsofDrop logo" className="h-11 w-auto block rounded-md" />
           </Link>
-          <button 
+          <button
             onClick={handleLogout}
             className="px-4 py-2 rounded-lg bg-white text-[#db2b2b] font-semibold shadow-md hover:shadow-lg transition-transform transform hover:-translate-y-0.5"
           >
@@ -126,13 +167,13 @@ function Profile() {
       <main className="max-w-[1400px] mx-auto px-4 py-10">
         <div className="bg-white/60 p-7 rounded-lg shadow-sm">
           <h2 className="text-2xl font-bold text-[#142323] mb-6">Profile Settings</h2>
-          
+
           {error && (
             <div className="mb-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded-lg">
               {error}
             </div>
           )}
-          
+
           {success && (
             <div className="mb-4 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg">
               {success}
@@ -222,6 +263,53 @@ function Profile() {
               </Link>
             </div>
           </form>
+
+          {/* ── Donor Verification Card ───────────────────────────────────────── */}
+          <div className="mt-8 rounded-xl border border-blue-100 bg-blue-50/60 p-6">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-blue-600 text-xl">🛡️</span>
+              <h3 className="text-base font-bold text-blue-900">Donor Verification</h3>
+            </div>
+
+            {verificationStatus === 'verified' && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-blue-700 bg-blue-100 border border-blue-300 px-3 py-1.5 rounded-full">
+                  ✓ Verified Donor
+                </span>
+                <span className="text-xs text-gray-500">Your profile has been verified by our team.</span>
+              </div>
+            )}
+
+            {verificationStatus === 'pending' && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-700 bg-amber-100 border border-amber-300 px-3 py-1.5 rounded-full">
+                  ⏳ Verification Pending
+                </span>
+                <span className="text-xs text-gray-500">We are reviewing your request. Usually within 24 hours.</span>
+              </div>
+            )}
+
+            {(verificationStatus === 'unverified' || verificationStatus === null) && (
+              <div className="space-y-3">
+                <p className="text-sm text-gray-600">
+                  Get a <strong>✓ Verified</strong> badge on your donor profile. Our team will confirm your identity and blood type before approving.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRequestVerification}
+                  disabled={verifyLoading}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
+                >
+                  {verifyLoading ? 'Submitting…' : 'Request Verification Badge'}
+                </button>
+              </div>
+            )}
+
+            {verifyMsg && (
+              <p className={`mt-3 text-sm font-medium ${verifyMsg.includes('Failed') ? 'text-red-600' : 'text-green-700'
+                }`}>{verifyMsg}</p>
+            )}
+          </div>
         </div>
       </main>
 

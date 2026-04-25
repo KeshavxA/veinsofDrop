@@ -8,6 +8,8 @@ import {
   normalizeBloodType,
 } from '../utils/bloodCompatibility'
 import NotificationBell from '../components/NotificationBell'
+import ReportModal from '../components/ReportModal'
+import { checkRateLimit, timeUntil } from '../utils/rateLimiter'
 
 function Home() {
   const { currentUser, signOut, isAuthenticated } = useAuth()
@@ -44,6 +46,7 @@ function Home() {
   const [minUnitsFilter, setMinUnitsFilter] = useState('')
   const [sortMode, setSortMode] = useState('same_city')
   const [currentUserProfile, setCurrentUserProfile] = useState(null)
+  const [reportTarget, setReportTarget] = useState(null) // { id, type, name }
 
   const asDate = (value) => {
     if (!value) return null
@@ -76,7 +79,10 @@ function Home() {
     const donorsUnsub = onSnapshot(
       collection(db, 'donors'),
       (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+        // Filter out blocked donors on the client side
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .filter((d) => !d.blocked)
         setDonors(list)
         setLoading(false)
       },
@@ -224,51 +230,56 @@ function Home() {
     e.preventDefault()
 
     if (!isAuthenticated) {
-      alert("Please login first to become a donor.");
-      navigate('/login');
-      return;
+      alert('Please login first to become a donor.')
+      navigate('/login')
+      return
     }
 
     if (donorPhone.length !== 10 || isNaN(donorPhone)) {
-      alert("Please enter a valid 10-digit phone number.");
-      return;
+      alert('Please enter a valid 10-digit phone number.')
+      return
     }
 
-    const duplicateFound = donors.some(d =>
-      d.email === donorEmail || d.phone === donorPhone
-    );
-
+    const duplicateFound = donors.some(
+      (d) => d.email === donorEmail || d.phone === donorPhone
+    )
     if (duplicateFound) {
-      alert("Registration Failed: A donor with this Email or Phone Number already exists.");
-      return;
+      alert('Registration Failed: A donor with this Email or Phone Number already exists.')
+      return
+    }
+
+    // ── Rate limit: 1 donor registration per user account ─────────────────
+    const rl = await checkRateLimit(currentUser?.uid, 'donors', 1, 24 * 365)
+    if (!rl.allowed) {
+      alert('You have already registered as a donor. Each account may only register once.')
+      return
     }
 
     if (!db) {
-      alert("Firestore database is not initialized. Please configure Firebase.");
-      return;
+      alert('Firestore database is not initialized. Please configure Firebase.')
+      return
     }
 
     try {
-      await addDoc(collection(db, "donors"), {
+      await addDoc(collection(db, 'donors'), {
         name: donorName,
         email: donorEmail,
         phone: donorPhone,
         bloodGroup: donorBloodGroup,
         location: donorLocation,
         availablequantity: donorAvailableQuantity,
-        userId: currentUser?.uid || "anonymous",
-        createdAt: new Date()
-      });
+        userId: currentUser?.uid || 'anonymous',
+        verified: false,          // admin / OTP flow sets this to true
+        blocked: false,
+        createdAt: new Date(),
+      })
 
-      alert("Thank you! You are now registered as a donor.");
-      fetchDonors();
-
+      alert('Thank you! You are now registered as a donor.')
       setShowDonorPopup(false)
-      setDonorName(""); setDonorPhone(""); setDonorBloodGroup(""); setDonorLocation(""); setAvailableQuantity(0);
-
+      setDonorName(''); setDonorPhone(''); setDonorBloodGroup(''); setDonorLocation(''); setAvailableQuantity(0)
     } catch (error) {
-      console.error("Error adding donor: ", error);
-      alert("Failed to submit. See console for details.");
+      console.error('Error adding donor: ', error)
+      alert('Failed to submit. See console for details.')
     }
   }
 
@@ -285,23 +296,31 @@ function Home() {
     e.preventDefault()
 
     if (!isAuthenticated) {
-      alert("Please login first to request blood.");
-      navigate('/login');
-      return;
+      alert('Please login first to request blood.')
+      navigate('/login')
+      return
     }
 
     if (requestPhone.length !== 10 || isNaN(requestPhone)) {
-      alert("Please enter a valid 10-digit phone number.");
-      return;
+      alert('Please enter a valid 10-digit phone number.')
+      return
+    }
+
+    // ── Rate limit: max 3 requests per user in 24 hours ────────────────────
+    const rl = await checkRateLimit(currentUser?.uid, 'requests', 3, 24)
+    if (!rl.allowed) {
+      const resetMsg = rl.resetAt ? ` Try again in ${timeUntil(rl.resetAt)}.` : ''
+      alert(`Rate limit reached: You can submit up to 3 blood requests per 24 hours.${resetMsg}`)
+      return
     }
 
     if (!db) {
-      alert("Firestore database is not initialized. Please configure Firebase.");
-      return;
+      alert('Firestore database is not initialized. Please configure Firebase.')
+      return
     }
 
     try {
-      await addDoc(collection(db, "requests"), {
+      await addDoc(collection(db, 'requests'), {
         patientName,
         bloodGroup,
         requestEmail,
@@ -309,20 +328,17 @@ function Home() {
         unitsRequired,
         emergencyLevel,
         hospitalLocation,
-        userId: currentUser?.uid || "anonymous",
-        status: "pending",
-        createdAt: new Date()
-      });
+        userId: currentUser?.uid || 'anonymous',
+        status: 'pending',
+        createdAt: new Date(),
+      })
 
-      console.log('Request submitted to database');
-      alert("Blood request submitted successfully!");
-
+      alert('Blood request submitted successfully!')
       setShowRequestPopup(false)
-      setPatientName(""); setBloodGroup(""); setRequestPhone(""); setUnitsRequired(""); setHospitalLocation("");
-
+      setPatientName(''); setBloodGroup(''); setRequestPhone(''); setUnitsRequired(''); setHospitalLocation('')
     } catch (error) {
-      console.error("Error submitting request: ", error);
-      alert("Failed to submit request.");
+      console.error('Error submitting request: ', error)
+      alert('Failed to submit request.')
     }
   }
 
@@ -471,15 +487,25 @@ function Home() {
                           </span>
                         )}
                       </div>
-                      {req.bloodGroup && (
+                      <div className="flex items-center gap-2 shrink-0">
+                        {req.bloodGroup && (
+                          <button
+                            type="button"
+                            onClick={() => setRecipientBloodFilter(req.bloodGroup)}
+                            className="rounded-lg border border-[#db2b2b] bg-white px-3 py-1.5 text-xs font-semibold text-[#db2b2b] hover:bg-red-50"
+                          >
+                            Show compatible donors
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => setRecipientBloodFilter(req.bloodGroup)}
-                          className="shrink-0 rounded-lg border border-[#db2b2b] bg-white px-3 py-1.5 text-xs font-semibold text-[#db2b2b] hover:bg-red-50"
+                          onClick={() => setReportTarget({ id: req.id, type: 'request', name: `${req.bloodGroup || ''} · ${req.hospitalLocation || ''}` })}
+                          className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-500 hover:border-red-300 hover:text-red-600 transition-colors"
+                          title="Report this request"
                         >
-                          Show compatible donors
+                          ⚑ Report
                         </button>
-                      )}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -649,12 +675,17 @@ function Home() {
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
                             <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{donor.name}</div>
-                              {donor.email && donor.email.includes('example') && (
-                                <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full inline-block mt-0.5">
-                                  Verified
-                                </span>
-                              )}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-gray-900">{donor.name}</span>
+                                {donor.verified && (
+                                  <span
+                                    title="Verified donor"
+                                    className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full"
+                                  >
+                                    ✓ Verified
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -691,12 +722,22 @@ function Home() {
                           {donor.availablequantity}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <button
-                            onClick={() => handleSendMailToDonor(donor)}
-                            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#db2b2b] hover:bg-[#c02525] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#db2b2b]"
-                          >
-                            Request
-                          </button>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => handleSendMailToDonor(donor)}
+                              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-[#db2b2b] hover:bg-[#c02525] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#db2b2b]"
+                            >
+                              Request
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setReportTarget({ id: donor.id, type: 'donor', name: donor.name })}
+                              className="inline-flex items-center px-3 py-2 border border-gray-200 text-xs font-medium rounded-md text-gray-500 hover:border-red-300 hover:text-red-600 transition-colors"
+                              title="Report this donor"
+                            >
+                              ⚑
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -941,10 +982,19 @@ function Home() {
                   <button type="button" onClick={() => setShowRequestPopup(false)} className="flex-1 px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">Cancel</button>
                   <button type="submit" className="flex-1 px-4 py-2 bg-[#db2b2b] text-white rounded-lg font-semibold hover:bg-[#c02525] transition-colors">Submit Request</button>
                 </div>
+                <p className="text-xs text-gray-400 pt-1 text-center">\u23f1 You may submit up to 3 blood requests per 24\u00a0hours.</p>
               </form>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Report modal */}
+      {reportTarget && (
+        <ReportModal
+          target={reportTarget}
+          onClose={() => setReportTarget(null)}
+        />
       )}
     </div>
   )
