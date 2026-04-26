@@ -4,16 +4,10 @@ import { useAuth } from '../contexts/AuthContext'
 import { db } from '../../firebase'
 import { doc, getDoc } from 'firebase/firestore'
 
-/**
- * AdminRoute — wraps any component that requires admin privileges.
- *
- * To grant admin access, set  `role: "admin"`  on the user's document in
- * Firestore:  users/{uid}.role = "admin"
- * (Firebase Console → Firestore → users collection → select doc → add field)
- */
+
 export default function AdminRoute({ children }) {
     const { currentUser, isAuthenticated, loading } = useAuth()
-    const [isAdmin, setIsAdmin] = useState(null) // null = still checking
+    const [isAdmin, setIsAdmin] = useState(null)
 
     useEffect(() => {
         if (!currentUser || !db) {
@@ -25,7 +19,6 @@ export default function AdminRoute({ children }) {
             .catch(() => setIsAdmin(false))
     }, [currentUser])
 
-    // Auth still loading
     if (loading || isAdmin === null) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-900">

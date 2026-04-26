@@ -1,20 +1,125 @@
 @import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --vod-bg: #e6fffb;
+  --vod-surface: #ffffff;
+  --vod-surface-2: #f8fafa;
+  --vod-border: #e5e7eb;
+  --vod-text: #142323;
+  --vod-text-muted: #6b7280;
+  --vod-primary: #db2b2b;
+  --vod-primary-dim: rgba(219, 43, 43, 0.1);
+
+  color-scheme: light;
+}
+
+html.dark {
+  --vod-bg: #0f172a;
+  --vod-surface: #1e293b;
+  --vod-surface-2: #162032;
+  --vod-border: #334155;
+  --vod-text: #f1f5f9;
+  --vod-text-muted: #94a3b8;
+  --vod-primary-dim: rgba(219, 43, 43, 0.18);
+
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--vod-bg);
+  color: var(--vod-text);
+  transition: background-color 0.25s ease, color 0.2s ease;
+}
+
+.vod-surface {
+  background-color: var(--vod-surface);
+  border-color: var(--vod-border);
+  color: var(--vod-text);
+}
+
+html.dark input,
+html.dark select,
+html.dark textarea {
+  background-color: #1e293b;
+  color: #f1f5f9;
+  border-color: #334155;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+html.dark ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+
 @keyframes pulse-gradient {
-  0%, 100% { transform: scale(0.95) translate3d(0, 0, 0); }
-  50% { transform: scale(1.05) translate3d(2%, -3%, 0); }
+
+  0%,
+  100% {
+    transform: scale(0.95) translate3d(0, 0, 0);
+  }
+
+  50% {
+    transform: scale(1.05) translate3d(2%, -3%, 0);
+  }
 }
 
 @keyframes drop {
-  0% { transform: translateY(-5%) scale(1); opacity: 0.8; }
-  50% { transform: translateY(5%) scale(1.04); opacity: 1; }
-  100% { transform: translateY(-5%) scale(1); opacity: 0.85; }
+  0% {
+    transform: translateY(-5%) scale(1);
+    opacity: 0.8;
+  }
+
+  50% {
+    transform: translateY(5%) scale(1.04);
+    opacity: 1;
+  }
+
+  100% {
+    transform: translateY(-5%) scale(1);
+    opacity: 0.85;
+  }
 }
 
 @keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
+
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+
+  100% {
+    background-position: 400px 0;
+  }
 }
 
 .plasma-gradient-bg-1 {
@@ -35,10 +140,62 @@
   animation-delay: 2.4s;
 }
 
-body {
-  margin: 0;
-  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+#pwa-install-banner {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid #334155;
+  border-radius: 16px;
+  padding: 12px 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 9999;
+  font-family: 'Poppins', sans-serif;
+  font-size: 0.85rem;
+  animation: float 4s ease-in-out infinite;
+  white-space: nowrap;
 }
 
+#pwa-install-banner button {
+  background: #db2b2b;
+  color: white;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+#pwa-install-banner button:hover {
+  background: #c02525;
+}
+
+#pwa-install-banner .dismiss {
+  background: transparent;
+  color: #64748b;
+  padding: 6px;
+  font-size: 0.85rem;
+}
+
+*,
+*::before,
+*::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 0.2s;
+  transition-timing-function: ease;
+}
+
+.animate-spin,
+.animate-pulse,
+.float-animation,
+.float-animation-delayed,
+[class*="animate-"] {
+  transition: none;
+}

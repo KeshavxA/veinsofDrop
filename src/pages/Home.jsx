@@ -9,6 +9,8 @@ import {
 } from '../utils/bloodCompatibility'
 import NotificationBell from '../components/NotificationBell'
 import ReportModal from '../components/ReportModal'
+import ThemeToggle from '../components/ThemeToggle'
+import { SkeletonDonorTable, SkeletonUrgentCard, EmptyState } from '../components/Skeletons'
 import { checkRateLimit, timeUntil } from '../utils/rateLimiter'
 
 function Home() {
@@ -441,6 +443,7 @@ function Home() {
             {isAuthenticated ? (
               <>
                 <NotificationBell />
+                <ThemeToggle />
                 <span className="text-white text-sm hidden sm:inline">Welcome, {currentUser?.email}</span>
                 <button
                   onClick={handleLogout}
@@ -669,17 +672,23 @@ function Home() {
             </p>
 
             {loading ? (
-              <div className="text-center py-10">
-                <p className="text-gray-500 text-lg">Loading donor data...</p>
-              </div>
+              <SkeletonDonorTable rows={6} />
             ) : sortedDonors.length === 0 ? (
-              <div className="text-center py-10">
-                <p className="text-gray-500">
-                  {recipientType && onlyCompatible
-                    ? `No registered donors match whole-blood compatibility for patient needing ${recipientType}. Try another type or turn off compatibility filter.`
-                    : 'No donors match your filters. Try clearing search/filters.'}
-                </p>
-              </div>
+              <EmptyState
+                icon={recipientType && onlyCompatible ? '🩸' : '🔍'}
+                title={recipientType && onlyCompatible ? 'No compatible donors found' : 'No donors match your filters'}
+                sub={recipientType && onlyCompatible
+                  ? `No registered donors can supply ${recipientType} blood. Try another type or turn off the compatibility filter.`
+                  : 'Try clearing your search term or filters to see all available donors.'}
+                action={(
+                  <button
+                    onClick={() => { setRecipientBloodFilter(''); setSearchQuery(''); setCityFilter(''); setDonorBloodFilter(''); setMinUnitsFilter('') }}
+                    className="text-sm font-semibold px-4 py-2 rounded-lg bg-[#db2b2b] text-white hover:bg-[#c02525] transition-colors"
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full divide-y divide-gray-200">
